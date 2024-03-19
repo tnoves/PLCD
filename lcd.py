@@ -5,14 +5,17 @@ import json
 import threading
 import socket
 
-arduino = serial.Serial('COM5', 9600, timeout=1)
+# Establish serial connection with Arduino
+arduino = serial.Serial('COM3', 9600, timeout=1)
 time.sleep(2)
 
+# Initialise Flask app and use lock to synchronize access to a shared resource.
 app = Flask(__name__)
+lock = threading.Lock()
 current_song_info = None
 previous_song_info = None
-lock = threading.Lock()
 
+# Function to retrieve local IP address
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -24,11 +27,13 @@ def get_local_ip():
         print(f"Error getting local IP address: {e}")
         return None
 
+# Function to send track and artist data to Arduino and print alert in command line
 def send_to_arduino(track, artist) :
     print(f"Sending to Arduino: Track - {track}, Artist - {artist}")
     arduino.write((f"{track}^{artist}\n").encode('utf-8'))
-    #### INTRODUCE READ FROM ARDUINO??
 
+
+# Function to assign data to be displayed when non-main user is using Plex
 def other_user(data, isMovie):
     global current_song_info
     pause = ""
@@ -40,6 +45,7 @@ def other_user(data, isMovie):
         current_song_info = f"*{data['Metadata']['grandparentTitle']}   -   {data['Account']['title']}"+pause
 
 
+# Listener to handle the Plex webhook
 @app.route('/webhook', methods=['POST'])
 def webhook_listener():
     global previous_song_info
@@ -47,19 +53,9 @@ def webhook_listener():
     data = json.loads(request.form['payload'])
     print(data)
 
-    """if data.get('event') in ['media.play', "media.resume"]:
-        with lock:
-            try:
-                current_song_info = f"{data['Metadata']['title']} - {data['Metadata']['grandparentTitle']}"
-            except KeyError:
-                current_song_info = f"{data['Metadata']['title']} - {data['Account']['title']}"
-    if data.get('event') == 'media.pause':
-        with lock:
-            current_song_info = f"{data['Metadata']['title']} - Paused"
-    """
-
     if data.get('event') in ['media.play', "media.resume", "media.pause"]:
         with lock:
+            # Determine previous and current song information based on media type and user
             if data['Metadata']['librarySectionType'] == "movie":
                 if data['Account']['title'] == "ben_mcin":
                     if data.get('event') == "media.pause":
@@ -88,13 +84,16 @@ def webhook_listener():
     return 'OK'
 
 
+# Function to
 def poll_plex():
     global previous_song_info
     global current_song_info
     while True:
         #time.sleep(.1)
         with lock:
+            # Check whether new update is from the main user or a secondary user, update display accordingly.
             if current_song_info is not None:
+                # Secondary user gets a temporary update on display, reverting back to initial value after a short wait.
                 if current_song_info[0] == '*':
                     print("Temp Song:", current_song_info[1:])
                     track, artist = current_song_info[1:].split("   -   ")
@@ -103,6 +102,7 @@ def poll_plex():
                     track, artist = previous_song_info.split("   -   ")
                     send_to_arduino(track, artist)
                     current_song_info = None
+                # Main user updates display and retains new data.
                 elif current_song_info[0] != '*':
                     print("Current Song:", current_song_info)
                     track, artist = current_song_info.split("   -   ")

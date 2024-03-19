@@ -45,7 +45,7 @@ void loop() {
     lastScrollTime = millis();
   }
 
-  // Your other code can go here if needed
+
 }
 
 void updateDisplay() {

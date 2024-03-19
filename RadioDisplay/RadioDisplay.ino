@@ -31,7 +31,7 @@ void loop() {
     }
   }
 
-  // Your other code can go here if needed
+
 }
 
 void updateDisplay() {
